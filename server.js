@@ -151,4 +151,23 @@ app.get('/admin/results',requireUser,asyncRoute(async(req,res)=>{ const results=
 app.get('/admin/results.csv',requireUser,asyncRoute(async(req,res)=>{ const results=await store.listResults(req.user.id); const header='studentName,examTitle,score,total,percent,createdAt\n'; const lines=results.map(r=>[r.studentName,r.examTitle,r.score,r.total,r.percent,r.createdAt].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'); res.setHeader('Content-Type','text/csv; charset=utf-8'); res.setHeader('Content-Disposition','attachment; filename="results.csv"'); res.send('\ufeff'+header+lines); }));
 app.use((err,req,res,next)=>{ console.error(err); res.status(500).send(layout('خطأ',`<div class="error">حصل خطأ في السيرفر. راجع Logs.</div>`)); });
 
-initDb().then(()=>app.listen(PORT,()=>console.log(`Exam app running on ${BASE_URL} - DB: ${HAS_POSTGRES?'Postgres':'JSON file'}`))).catch(err=>{ console.error('DB init failed',err); process.exit(1); });
+
+let initPromise = initDb();
+
+if (require.main === module) {
+  initPromise
+    .then(() => app.listen(PORT, () => console.log(`Exam app running on ${BASE_URL} - DB: ${HAS_POSTGRES ? 'Postgres' : 'JSON file'}`)))
+    .catch(err => { console.error('DB init failed', err); process.exit(1); });
+} else {
+  module.exports = async (req, res) => {
+    try {
+      await initPromise;
+      return app(req, res);
+    } catch (err) {
+      console.error('DB init failed', err);
+      res.statusCode = 500;
+      res.end('DB init failed');
+    }
+  };
+}
+
