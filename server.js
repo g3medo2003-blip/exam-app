@@ -7,9 +7,10 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { nanoid } = require('nanoid');
 const { Pool } = require('pg');
-const multer = require('multer');
-const XLSX = require('xlsx');
-const pdfParse = require('pdf-parse');
+let multer, XLSX, pdfParse;
+try { multer = require('multer'); } catch(e) { multer = null; }
+try { XLSX = require('xlsx'); } catch(e) { XLSX = null; }
+try { pdfParse = require('pdf-parse'); } catch(e) { pdfParse = null; }
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,7 +25,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: 'lax' } }));
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer ? multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }) : { single: () => (req,res,next) => next(new Error('مكتبات رفع الملفات غير مثبتة. حدّث package.json ثم اعمل Redeploy.')) };
 
 function ensureFileDb(){
   if(!fs.existsSync(path.dirname(DATA_FILE))) fs.mkdirSync(path.dirname(DATA_FILE), { recursive:true });
@@ -199,6 +200,7 @@ function correctIndexFrom(raw, options){
   return found >= 0 ? found : 0;
 }
 function parseQuestionsFromExcel(buffer){
+  if(!XLSX) throw new Error('مكتبة Excel غير مثبتة. حدّث package.json ثم اعمل Redeploy.');
   const workbook = XLSX.read(buffer, { type:'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval:'' });
@@ -258,6 +260,7 @@ async function parseQuestionsFromFile(file){
   if(name.endsWith('.xlsx') || name.endsWith('.xls')) return parseQuestionsFromExcel(file.buffer);
   if(name.endsWith('.csv') || name.endsWith('.txt') || mime.includes('text')) return parseQuestionsFromText(file.buffer.toString('utf8'));
   if(name.endsWith('.pdf') || mime.includes('pdf')){
+    if(!pdfParse) throw new Error('مكتبة PDF غير مثبتة. حدّث package.json ثم اعمل Redeploy.');
     const data = await pdfParse(file.buffer);
     const text = String(data.text||'').trim();
     if(!text) throw new Error('ملف PDF لا يحتوي على نص قابل للقراءة. لو الملف صور/سكان، حوّله Excel أو PDF نصي.');
